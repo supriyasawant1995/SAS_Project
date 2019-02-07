@@ -1,0 +1,273 @@
+DATA FAA_COMBINED;
+SET STATCOMP.faa1 STATCOMP.faa2;
+RUN;
+PROC PRINT DATA=FAA_COMBINED;
+RUN;
+
+/* to find out missing values */
+DATA MISSINGdata;
+SET FAA_COMBINED;
+PROC MEANS DATA=MISSINGdata NMISS N MEAN median;
+RUN;
+
+
+/* here i got to know that there are some redunndant rows in data set which i need to remove*/
+DATA Required;
+SET MISSINGdata;
+if aircraft ='' and duration='' and no_pasg ='' and speed_air = ''and speed_ground=''and height = ''and pitch ='' and distance='' then delete;
+run;
+PROC PRINT DATA=REQUIRED;
+RUN;
+
+
+DATA air;
+SET REQUIRED;
+PROC PRINT DATA = air;
+WHERE (speed_air > 140 or speed_air < 30) and speed_air ^= .;
+RUN;
+
+/* We can see only two values out of threshold values */
+data air_modified;
+SET REQUIRED;
+if (speed_air > 140 ) then speed_air = 140;
+PROC PRINT DATA = AIR_MODIFIED;
+RUN;
+
+/* To find out missing levels */
+PROC FREQ DATA = AIR_MODIFIED NLEVELS;
+TABLES  aircraft  duration no_pasg speed_air speed_ground height pitch distance;
+RUN;
+
+/* to remove dupilacate observations if any contains */
+PROC SORT DATA= AIR_MODIFIED OUT=SINGLE DUPOUT=DUPS NODUPKEY;
+BY aircraft duration no_pasg speed_air speed_ground height pitch distance;
+RUN;
+PROC PRINT DATA=SINGLE;
+
+/*We will need aircraft id to know more about duplicate value*/
+
+/* To find out min and max and avge of each variable */
+
+
+/*DATA SINGLE_MOdIFIED;
+SET SINGLE;
+IF ( DURATION = '') then Duration= 154;
+TITLE Observe_single_modified;
+run;
+proc print data = single_modified;*/
+
+proc means data=single ;
+VAR duration no_pasg speed_air speed_ground height pitch distance ;
+RUN;
+
+/* To know the amount of variables out of threshold values */
+PROC PRINT DATA=SINGLE;
+VAR duration no_pasg speed_air speed_ground height pitch distance;
+Where duration < 40  ; /*40 min is minimum value for duration*/
+TITLE OBSERVE_DURATION;
+run;
+
+PROC PRINT DATA=SINGLE;
+VAR duration no_pasg speed_air speed_ground height pitch distance;
+Where no_pasg > 300 ; /* Consider max occupancy of passenger to be 300*/
+TITLE OBSERVE_NO_PASG;
+run;
+
+
+PROC PRINT DATA=SINGLE;
+VAR duration no_pasg speed_air speed_ground height pitch distance;
+Where (speed_ground > 140 OR speed_ground < 30 ) ; /*speed ground should lie betn 30 to 140 MPH*/
+TITLE OBSERVE speed_ground;
+run;
+
+PROC PRINT DATA=SINGLE;
+VAR duration no_pasg speed_air speed_ground height pitch distance;
+Where height < 6  ; /*min height required is 6 m*/
+TITLE OBSERVE_height;
+run;
+
+PROC PRINT DATA=SINGLE;
+VAR duration no_pasg speed_air speed_ground height pitch distance;
+Where (pitch <1.35 or pitch > 5.35 ); /*Considered min pitch to be 1.35 and max pitch to be5.35*/
+TITLE Observe_pitch;
+run;
+
+
+PROC PRINT DATA=SINGLE;
+VAR duration no_pasg speed_air speed_ground height pitch distance;
+Where distance > 6000;
+TITLE Observe_distance;/*Landing platform is usually less than 6000 feet*/
+run;
+
+
+
+/*For some of flights it's observed that duration is even less than 20 min which
+ is not possible.*/
+DATA SINGLE_MOdIFIED1;
+SET SINGLE;
+IF (0 <DURATION < 20 ) then DELETE ;
+TITLE Observe_single_modified1;
+run;
+proc print data = single_modified1;
+
+/* For some of the observation height is negative, which is not possible */
+DATA SINGLE_MOdIFIED2;
+SET SINGLE_MODIFIED1;
+IF ( Height < 0) then DELETE ;
+TITLE Observe_single_modified2;
+run;
+proc print data = single_modified2;
+
+
+
+DATA SINGLE_MODIFIED3;
+SET SINGLE_MODIFIED2;
+IF HEIGHT < 6 THEN HEIGHT = 6;
+IF 20<DURATION < 40 THEN DURATION = 40;
+IF speed_ground > 140 tHEN speed_ground = 140;
+IF speed_ground < 30 tHEN speed_ground = 30;
+IF PITCH < 1.35 THEN PITCH = 1.35;
+IF PITCH > 5.35 thEN PITCH = 5.35;
+IF DISTANCE> 6000 THEN DISTANCE=6000;
+TITLE CLEANED DATA;
+RUN;
+PROC PRINT DATA = SINGLE_MODIFIED3;
+RUN;
+
+PROC UNIVARIATE DATA =SINGLE_MODIFIED3;
+proc means data=single_modified3 ;
+proc means data=single_modified3 nmiss n;
+
+Proc sort data =single_modified3;
+by distance;
+run;
+
+
+PROC PLOT DATA = single_modified3;
+PLOT distance*HEIGHT;
+PLOT distance*speed_air;
+PLOT distance*speed_ground;
+PLOT distance*duration;
+PLOT distance*no_pasg;
+PLOT distance*pitch;
+Run;
+
+PROC TTEST DATA= SINGLE_MODIFIED3;
+CLASS AIRCRAFT;
+VAR DISTANCE;
+RUN;
+
+
+
+PROC CORR DATA = SINGLE_MODIFIED3;
+VAR DISTANCE SPEED_AIR SPEED_GROUND DURATION NO_PASG PITCH HEIGHT;
+RUN;
+
+
+PROC CORR DATA = SINGLE_MODIFIED3;
+VAR SPEED_AIR SPEED_GROUND DURATION NO_PASG PITCH HEIGHT;
+WITH DISTANCE;
+RUN;
+
+PROC CORR DATA = SINGLE_MODIFIED3;
+VAR SPEED_AIR SPEED_GROUND DURATION NO_PASG PITCH HEIGHT;
+with distance;
+where (aircraft = 'airbus');
+RUN;
+
+PROC CORR DATA = SINGLE_MODIFIED3;
+VAR SPEED_AIR SPEED_GROUND DURATION NO_PASG PITCH HEIGHT;
+with distance;
+where (aircraft = 'boeing');
+RUN;
+
+PROC CORR DATA = SINGLE_MODIFIED3;
+VAR SPEED_AIR SPEED_GROUND;
+RUN;
+
+PROC REG DATA = SINGLE_MODIFIED3;
+MODEL DISTANCE = SPEED_GROUND pitch height;
+RUN;
+
+PROC REG DATA = SINGLE_MODIFIED3;
+MODEL DISTANCE = SPEED_GROUND pitch;
+RUN;
+
+PROC REG DATA = SINGLE_MODIFIED3;
+MODEL DISTANCE = SPEED_GROUND height;
+RUN;
+
+
+PROC REG DATA = SINGLE_MODIFIED3;
+MODEL DISTANCE =pitch height;
+RUN;
+
+/*regression for boeing*/
+PROC REG DATA = SINGLE_MODIFIED3;
+MODEL DISTANCE = SPEED_GROUND pitch height;
+where (aircraft='boeing');
+RUN;
+
+PROC REG DATA = SINGLE_MODIFIED3;
+MODEL DISTANCE = SPEED_GROUND pitch;
+where (aircraft='boeing');
+RUN;
+
+PROC REG DATA = SINGLE_MODIFIED3;
+MODEL DISTANCE = SPEED_GROUND height;
+where (aircraft='boeing');
+RUN;
+
+
+PROC REG DATA = SINGLE_MODIFIED3;
+MODEL DISTANCE =pitch height;
+where (aircraft='boeing');
+RUN;
+
+/*regression for airbus*/
+PROC REG DATA = SINGLE_MODIFIED3;
+MODEL DISTANCE = SPEED_GROUND pitch height;
+where (aircraft='airbus');
+RUN;
+
+PROC REG DATA = SINGLE_MODIFIED3;
+MODEL DISTANCE = SPEED_GROUND pitch;
+where (aircraft='airbus');
+RUN;
+
+PROC REG DATA = SINGLE_MODIFIED3;
+MODEL DISTANCE = SPEED_GROUND height;
+where (aircraft='airbus');
+RUN;
+
+
+PROC REG DATA = SINGLE_MODIFIED3;
+MODEL DISTANCE =pitch height;
+where (aircraft='airbus');
+RUN;
+
+
+/*residuals*/
+PROC REG DATA = SINGLE_MODIFIED3;
+MODEL DISTANCE = SPEED_GROUND height pitch/R;
+output out= single_modified4 residual=R;
+RUN;
+
+proc print data=single_modified4;
+run;
+
+proc chart data=single_modified4;
+vbar R;
+run;
+
+proc chart data=single_modified4;
+vbar R;
+where (aircraft= 'airbus');
+run;
+
+proc chart data=single_modified4;
+vbar R;
+where (aircraft= 'boeing');
+run;
+
+
